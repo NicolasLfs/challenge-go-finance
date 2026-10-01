@@ -1,0 +1,95 @@
+name: wagering-local
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wagering}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-wagering-password}
+      POSTGRES_DB: ${POSTGRES_DB:-wagering}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db:/db:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  localstack:
+    image: localstack/localstack:4.5.0
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      SQS_ENDPOINT_STRATEGY: path
+      PERSISTENCE: "1"
+    ports:
+      - "127.0.0.1:${LOCALSTACK_PORT:-4566}:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal sqs list-queues --region $${AWS_DEFAULT_REGION} >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  localstack-init:
+    image: amazon/aws-cli:2.27.41
+    entrypoint: ["/bin/sh", "/scripts/init-sqs.sh"]
+    environment:
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_ENDPOINT_URL: http://localstack:4566
+    volumes:
+      - ./scripts/localstack/init-sqs.sh:/scripts/init-sqs.sh:ro
+    depends_on:
+      localstack:
+        condition: service_healthy
+    restart: "no"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2.5
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-local-admin-password}
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-8081}:8080"
+      - "127.0.0.1:${KEYCLOAK_HEALTH_PORT:-9000}:9000"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak/realm.json:/opt/keycloak/data/import/wagering-local-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  app-check:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres_data:
+  localstack_data:
+  keycloak_data:
