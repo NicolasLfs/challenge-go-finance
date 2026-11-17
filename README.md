@@ -1,6 +1,6 @@
 # Processamento Distribuído de Apostas em Go — Jungle Gaming
 
-Solução do desafio técnico para a vaga de Backend Developer Júnior. Aplicação desenvolvida em Go utilizando Uber Fx, PostgreSQL (com `sqlc` e `pgx/v5`), AWS SQS (LocalStack) e Keycloak (OAuth 2.0 / OIDC).
+Este projeto é um estudo prático sobre o processamento distribuído de operações financeiras de apostas. O problema proposto é manter saldos e registros financeiros íntegros mesmo diante de concorrência, mensagens duplicadas e falhas entre etapas do processamento. A solução implementa um serviço em Go com API HTTP e consumidor SQS, usando PostgreSQL como fonte de verdade e combinando transações, idempotência persistente, ledger e outbox para garantir a consistência das operações.
 
 > Para consultar o enunciado original do desafio, veja [CHALLENGE.md](./CHALLENGE.md).
 > Para detalhes arquiteturais e justificativas técnicas, veja [ARCHITECTURE.md](./ARCHITECTURE.md).
